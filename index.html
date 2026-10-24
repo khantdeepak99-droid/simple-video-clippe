@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10131b">
+  <title>Simple Clipper — Manual Video Trimmer</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="page-shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Simple Clipper home">
+        <span class="brand-mark">SC</span>
+        <span>simple<span class="brand-light">clipper</span></span>
+      </a>
+      <span class="top-note"><span class="status-dot"></span> Manual trim tool</span>
+    </header>
+
+    <section class="hero">
+      <div class="eyebrow"><span class="eyebrow-line"></span> SIMPLE. PRECISE. YOUR TIMESTAMPS.</div>
+      <h1>Cut the moment.<br><span>Keep the good part.</span></h1>
+      <p class="hero-copy">Add a video, set the start and end times, and download your clip. No automatic editing. You choose the exact moment.</p>
+    </section>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="messages" role="alert">
+          {% for category, message in messages %}
+            <div class="message {{ category }}"><span class="message-icon">!</span><span>{{ message }}</span></div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <section class="workspace">
+      <div class="section-heading">
+        <div class="step-number">01</div>
+        <div><h2>Add your video</h2><p>Choose one source to get started.</p></div>
+      </div>
+
+      <form id="clip-form" action="{{ url_for('clip') }}" method="post" enctype="multipart/form-data">
+        <div class="source-tabs" role="tablist" aria-label="Video source">
+          <button class="source-tab active" type="button" data-source="upload" role="tab" aria-selected="true">
+            <span class="tab-icon">↑</span><span><strong>Upload a file</strong><small>From your device</small></span>
+          </button>
+          <button class="source-tab" type="button" data-source="youtube" role="tab" aria-selected="false">
+            <span class="tab-icon play-icon">▶</span><span><strong>YouTube link</strong><small>Paste a video URL</small></span>
+          </button>
+        </div>
+        <input type="hidden" name="source_type" id="source_type" value="upload">
+
+        <div class="source-panel" id="upload-panel">
+          <label class="dropzone" for="video_file" id="dropzone">
+            <span class="upload-symbol">↑</span>
+            <strong id="file-label">Choose a video to upload</strong>
+            <span id="file-hint">or drag and drop it here</span>
+            <span class="file-types">MP4 · MOV · MKV · WEBM · AVI</span>
+          </label>
+          <input class="visually-hidden" id="video_file" name="video_file" type="file" accept="video/*,.mkv,.avi,.webm,.m4v">
+        </div>
+
+        <div class="source-panel hidden" id="youtube-panel">
+          <label class="field-label" for="youtube_url">YouTube video URL</label>
+          <div class="url-input-wrap"><span class="url-symbol">↗</span><input id="youtube_url" name="youtube_url" type="url" placeholder="https://www.youtube.com/watch?v=..." autocomplete="url"></div>
+          <p class="helper-text">Public videos may work. Private, restricted, or unavailable videos may not be accessible.</p>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="section-heading timestamp-heading">
+          <div class="step-number">02</div>
+          <div><h2>Set your timestamps</h2><p>Enter the exact section you want to keep.</p></div>
+        </div>
+
+        <div class="timestamp-grid">
+          <div class="field-group">
+            <label class="field-label" for="start_time">Start time</label>
+            <div class="time-input-wrap"><span class="time-symbol">▶</span><input id="start_time" name="start_time" type="text" value="00:00:00" placeholder="HH:MM:SS" required pattern="[0-9:.]+" inputmode="decimal"><span class="time-badge">IN</span></div>
+            <span class="field-hint">Example: 00:01:25</span>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="end_time">End time</label>
+            <div class="time-input-wrap"><span class="time-symbol">■</span><input id="end_time" name="end_time" type="text" value="00:00:30" placeholder="HH:MM:SS" required pattern="[0-9:.]+" inputmode="decimal"><span class="time-badge out">OUT</span></div>
+            <span class="field-hint">Example: 00:02:40</span>
+          </div>
+        </div>
+        <p class="timestamp-note">Use <strong>HH:MM:SS</strong>, <strong>MM:SS</strong>, or seconds (e.g. 85). End time must be later than start time. Maximum clip length: {{ (max_clip_seconds // 60) }} minutes.</p>
+
+        <button class="create-button" id="create-button" type="submit"><span class="button-label">Create my clip</span><span class="button-arrow">↗</span></button>
+        <p class="privacy-note"><span class="lock-icon">▣</span> Source files are temporarily processed and then removed from the server.</p>
+      </form>
+    </section>
+
+    {% if clip_ready %}
+    <section class="result-card" aria-live="polite">
+      <div class="result-check">✓</div>
+      <div class="result-copy"><span class="result-kicker">YOUR CLIP IS READY</span><h2>Nice cut.</h2><p>Your {{ clip_duration }} clip has been created successfully.</p></div>
+      <a class="download-button" href="{{ download_url }}"><span>↓</span> Download clip</a>
+    </section>
+    {% endif %}
+
+    <footer>
+      <span>Simple Clipper</span><span>Made for manual editing · You control the timestamps</span>
+    </footer>
+  </main>
+  <div class="processing-overlay hidden" id="processing-overlay" aria-live="polite">
+    <div class="processing-card"><div class="spinner"></div><h2>Creating your clip…</h2><p>Processing the video can take a little while. Keep this tab open.</p></div>
+  </div>
+  <script>
+    const tabs = document.querySelectorAll('.source-tab');
+    const sourceType = document.getElementById('source_type');
+    const uploadPanel = document.getElementById('upload-panel');
+    const youtubePanel = document.getElementById('youtube-panel');
+    const fileInput = document.getElementById('video_file');
+    const fileLabel = document.getElementById('file-label');
+    const fileHint = document.getElementById('file-hint');
+    const dropzone = document.getElementById('dropzone');
+    const youtubeUrl = document.getElementById('youtube_url');
+    const form = document.getElementById('clip-form');
+    const overlay = document.getElementById('processing-overlay');
+    const createButton = document.getElementById('create-button');
+
+    function chooseSource(source) {
+      sourceType.value = source;
+      tabs.forEach(tab => {
+        const selected = tab.dataset.source === source;
+        tab.classList.toggle('active', selected);
+        tab.setAttribute('aria-selected', String(selected));
+      });
+      uploadPanel.classList.toggle('hidden', source !== 'upload');
+      youtubePanel.classList.toggle('hidden', source !== 'youtube');
+      fileInput.required = source === 'upload';
+      youtubeUrl.required = source === 'youtube';
+    }
+    tabs.forEach(tab => tab.addEventListener('click', () => chooseSource(tab.dataset.source)));
+    chooseSource('upload');
+
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files && fileInput.files[0]) {
+        fileLabel.textContent = fileInput.files[0].name;
+        fileHint.textContent = `${(fileInput.files[0].size / (1024 * 1024)).toFixed(1)} MB selected`;
+        dropzone.classList.add('has-file');
+      }
+    });
+    ['dragenter', 'dragover'].forEach(eventName => dropzone.addEventListener(eventName, event => {
+      event.preventDefault(); dropzone.classList.add('dragging');
+    }));
+    ['dragleave', 'drop'].forEach(eventName => dropzone.addEventListener(eventName, event => {
+      event.preventDefault(); dropzone.classList.remove('dragging');
+    }));
+    dropzone.addEventListener('drop', event => {
+      const files = event.dataTransfer.files;
+      if (files && files.length) {
+        fileInput.files = files;
+        fileInput.dispatchEvent(new Event('change'));
+      }
+    });
+    form.addEventListener('submit', event => {
+      const source = sourceType.value;
+      if (source === 'upload' && (!fileInput.files || !fileInput.files.length)) {
+        event.preventDefault(); alert('Please choose a video file first.'); return;
+      }
+      if (source === 'youtube' && !youtubeUrl.value.trim()) {
+        event.preventDefault(); alert('Please paste a YouTube URL first.'); return;
+      }
+      createButton.disabled = true;
+      createButton.querySelector('.button-label').textContent = 'Creating clip…';
+      overlay.classList.remove('hidden');
+    });
+  </script>
+</body>
+</html>
