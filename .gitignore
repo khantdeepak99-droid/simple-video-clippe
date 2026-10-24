@@ -1,8 +1,8 @@
-__pycache__/
-*.py[cod]
 .venv/
 venv/
-.env
+env/
+__pycache__/
+*.py[cod]
 uploads/*
 !uploads/.gitkeep
 outputs/*
